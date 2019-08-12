@@ -80,6 +80,28 @@ describe('untransform', function () {
     expect(data.series[0].books).to.have.deep.members(series[0].books.map(book => ({ id: book.id })))
   })
 
+  it('single primary data with an empty to-one relationship', function () {
+    const payload = transformalizer.transform({ name: 'book', source: books[0], options: {} })
+
+    payload.data.relationships.author.data = null
+
+    const data = transformalizer.untransform({ document: payload })
+
+    expect(data).to.have.all.keys('book')
+
+    expect(data.book).to.be.an('array').with.lengthOf(1)
+
+    expect(data.book).to.have.deep.members([{
+      id: books[0].id,
+      title: books[0].title,
+      copyright: books[0].copyright,
+      author: null,
+      reviews: books[0].reviews.map(review => ({ id: review.id })),
+      publisher: { id: books[0].publisher.id },
+      tags: books[0].tags.map(tag => ({ id: tag.id })),
+    }])
+  })
+
   it('single primary data and included data', function () {
     const payload = transformalizer.transform({ name: 'series', source: series[2] })
     const data = transformalizer.untransform({ document: payload, options: { untransformIncluded: true } })
@@ -99,6 +121,87 @@ describe('untransform', function () {
       title: book.title,
       copyright: book.copyright,
       author: { id: book.author.id },
+      reviews: book.reviews.map(review => ({ id: review.id })),
+      publisher: { id: book.publisher.id },
+      tags: book.tags.map(tag => ({ id: tag.id })),
+    })))
+
+    expect(data.tag).to.be.an('array').with.lengthOf(4)
+    expect(data.tag).to.have.deep.members(tags)
+
+    expect(data.author).to.be.an('array').with.lengthOf(2)
+    expect(data.author).to.have.deep.members([authors[2], authors[4]].map((author) => {
+      const newAuthor = {
+        id: author.id,
+        firstName: author.firstName,
+        lastName: author.lastName,
+      }
+
+      if (author.books) {
+        newAuthor.books = author.books.map(book => ({ id: book.id }))
+      }
+
+      if (author.reviews) {
+        newAuthor.reviews = author.reviews.map(review => ({ id: review.id }))
+      }
+
+      return newAuthor
+    }))
+
+    expect(data.review).to.be.an('array').with.lengthOf(2)
+    expect(data.review).to.have.deep.members(_.flatMap(series[2].books, 'reviews').map((review) => {
+      const newReview = { id: review.id }
+
+      if (review.title) {
+        newReview.title = review.title
+      }
+
+      if (review.content) {
+        newReview.content = review.content
+      }
+
+      if (review.rating) {
+        newReview.rating = review.rating
+      }
+
+      if (review.author) {
+        newReview.author = { id: review.author.id }
+      }
+
+      return newReview
+    }))
+
+    expect(data.publisher).to.be.an('array').with.lengthOf(1)
+    expect(data.publisher[0]).to.deep.equal(publishers[2])
+  })
+
+  it('single primary data with an empty to-one relationship and included data', function () {
+    const payload = transformalizer.transform({ name: 'series', source: series[2] })
+    const modifiedBookId = books[10].id
+
+    const foundBook = payload.included.find(item => item.type === 'book' && item.id === modifiedBookId.toString())
+
+    if (foundBook) {
+      foundBook.relationships.author.data = null
+    }
+
+    const data = transformalizer.untransform({ document: payload, options: { untransformIncluded: true } })
+
+    expect(data).to.have.all.keys('series', 'book', 'tag', 'author', 'review', 'publisher')
+
+    expect(data.series).to.be.an('array').with.lengthOf(1)
+    expect(data.series[0]).to.have.property('id', series[2].id)
+    expect(data.series[0]).to.have.property('title', series[2].title)
+    expect(data.series[0]).to.have.property('books')
+    expect(data.series[0].books).to.be.an('array').with.lengthOf(series[2].books.length)
+    expect(data.series[0].books).to.have.deep.members(series[2].books.map(book => ({ id: book.id })))
+
+    expect(data.book).to.be.an('array').with.lengthOf(7)
+    expect(data.book).to.have.deep.members(series[2].books.map(book => ({
+      id: book.id,
+      title: book.title,
+      copyright: book.copyright,
+      author: book.id === modifiedBookId ? null : { id: book.author.id },
       reviews: book.reviews.map(review => ({ id: review.id })),
       publisher: { id: book.publisher.id },
       tags: book.tags.map(tag => ({ id: tag.id })),
@@ -194,6 +297,88 @@ describe('untransform', function () {
       if (book.author.reviews) {
         expect(book.author.reviews).to.be.an('array').with.lengthOf(expectedBook.author.reviews.length)
         expect(book.author.reviews).to.have.deep.members(expectedBook.author.reviews.map(review => ({ id: review.id })))
+      }
+
+      expect(book.reviews).to.be.an('array').with.lengthOf(expectedBook.reviews.length)
+      book.reviews.forEach((review) => {
+        const expectedReview = expectedBook.reviews.find(r => review.id === r.id)
+
+        expect(expectedReview).to.not.equal(undefined)
+        expect(review.title).to.equal(expectedReview.title)
+        expect(review.content).to.equal(expectedReview.content)
+        expect(review.rating).to.equal(expectedReview.rating)
+
+        if (expectedReview.author) {
+          expect(review).to.have.property('author')
+          expect(review.author).to.have.property('id', expectedReview.author.id)
+          expect(review.author).to.have.property('firstName', expectedReview.author.firstName)
+          expect(review.author).to.have.property('lastName', expectedReview.author.lastName)
+        }
+      })
+
+      expect(book).to.have.property('publisher')
+      expect(book.publisher).to.have.property('id', expectedBook.publisher.id)
+      expect(book.publisher).to.have.property('name', expectedBook.publisher.name)
+
+      expect(book.tags).to.be.an('array').with.lengthOf(expectedBook.tags.length)
+      expect(book.tags).to.have.deep.members(expectedBook.tags)
+    })
+  })
+
+  it('single primary data with an empty to-one relationship and nest included data', function () {
+    const payload = transformalizer.transform({ name: 'series', source: series[2] })
+    const modifiedBookId = books[10].id
+
+    const foundBook = payload.included.find(item => item.type === 'book' && item.id === modifiedBookId.toString())
+
+    if (foundBook) {
+      foundBook.relationships.author.data = null
+    }
+
+    const data = transformalizer.untransform({ document: payload, options: { untransformIncluded: true, nestIncluded: true } })
+
+    expect(data).to.have.all.keys('series', 'book', 'tag', 'author', 'review', 'publisher')
+
+    expect(data.series).to.be.an('array').with.lengthOf(1)
+    expect(data.book).to.be.an('array').with.lengthOf(7)
+    expect(data.tag).to.be.an('array').with.lengthOf(4)
+    expect(data.author).to.be.an('array').with.lengthOf(2)
+    expect(data.review).to.be.an('array').with.lengthOf(2)
+    expect(data.publisher).to.be.an('array').with.lengthOf(1)
+
+    expect(data.series[0]).to.have.property('id', series[2].id)
+    expect(data.series[0]).to.have.property('title', series[2].title)
+    expect(data.series[0]).to.have.property('books')
+    expect(data.series[0].books).to.be.an('array').with.lengthOf(series[2].books.length)
+
+    data.series[0].books.forEach((book) => {
+      const expectedBook = series[2].books.find(b => book.id === b.id)
+
+      expect(expectedBook).to.not.equal(undefined)
+      expect(book).to.have.property('title', expectedBook.title)
+      expect(book).to.have.property('copyright', expectedBook.copyright)
+
+      if (book.id === modifiedBookId) {
+        expect(book).to.have.property('author')
+        expect(book.author).to.equal(null)
+      } else {
+        expect(book).to.have.property('author')
+        expect(book.author).to.have.property('id', expectedBook.author.id)
+        expect(book.author).to.have.property('firstName', expectedBook.author.firstName)
+        expect(book.author).to.have.property('lastName', expectedBook.author.lastName)
+        expect(book.author.books).to.be.an('array').with.lengthOf(expectedBook.author.books.length)
+        book.author.books.forEach((nestedBook) => {
+          const expectedNestedBook = expectedBook.author.books.find(b => nestedBook.id === b.id)
+
+          expect(expectedNestedBook).to.not.equal(undefined)
+          expect(nestedBook).to.have.property('title', expectedNestedBook.title)
+          expect(nestedBook).to.have.property('copyright', expectedNestedBook.copyright)
+        })
+
+        if (book.author.reviews) {
+          expect(book.author.reviews).to.be.an('array').with.lengthOf(expectedBook.author.reviews.length)
+          expect(book.author.reviews).to.have.deep.members(expectedBook.author.reviews.map(review => ({ id: review.id })))
+        }
       }
 
       expect(book.reviews).to.be.an('array').with.lengthOf(expectedBook.reviews.length)

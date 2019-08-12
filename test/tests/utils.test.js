@@ -205,6 +205,13 @@ describe('validateJsonApiDocument', function () {
     expect(validateJsonApiDocument.bind(null, document)).to.throw(`Relationship "author" of primary data resource "${document.data.id}, ${document.data.type}" must have a "data" field`)
   })
 
+  it('should succeed if the JSON-API document primary data resource relationship data is null', function () {
+    const document = JSON.parse(JSON.stringify(documentTemplate))
+    document.data.relationships.author.data = null
+
+    expect(validateJsonApiDocument.bind(null, document)).to.not.throw()
+  })
+
   it('should fail if the JSON-API document primary data resource relationship id is missing', function () {
     const document = JSON.parse(JSON.stringify(documentTemplate))
     delete document.data.relationships.author.data.id
