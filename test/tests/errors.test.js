@@ -9,6 +9,12 @@ describe('errors and coverage', function () {
       const transformalizer = createTransformalizer()
       expect(transformalizer.register.bind(null, {})).to.throw(Error)
     })
+
+    it('should throw if the name is duplicated', function () {
+      const transformalizer = createTransformalizer()
+      transformalizer.register({ name: 'duplicate-schema' })
+      expect(transformalizer.register.bind(null, { name: 'duplicate-schema' })).to.throw(Error)
+    })
   })
 
   describe('#transform', function () {
@@ -101,8 +107,8 @@ describe('errors and coverage', function () {
           },
         },
       }
-      transformalizer.register({ name: 'no-relationships', schema })
-      expect(transformalizer.transform({ name: 'no-relationships', source: { id: 1 } }))
+      transformalizer.register({ name: 'no-relationships-2', schema })
+      expect(transformalizer.transform({ name: 'no-relationships-2', source: { id: 1 } }))
       .to.not.have.deep.property('data.relationships')
     })
 
